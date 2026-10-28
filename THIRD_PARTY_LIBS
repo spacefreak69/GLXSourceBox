@@ -1,0 +1,34 @@
+The project code itself is WTFPL licensed
+
+Below are the libraries i used
+
+SDL2, SDL2_image, SDL2_mixer and SDL2_ttf
+    zlib license.
+    https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt (this is SDL3 license but it will do i guess)
+    Some files from SDL2 are in this repo as i extracted them from the 
+    MINGW32 development package so Windows builds are a little less petty. 
+
+GLEW
+    BSD-3-Clause and MIT (GL, EGL and GLX headers have copyrights from Khronos and Mesa). 
+    The original license is at glew/LICENSE.txt.
+    https://glew.sourceforge.net/
+
+libGLU from Mesa3D
+    SGI Free Software License B v2.0 (MIT-style).
+    https://gitlab.freedesktop.org/mesa/glu
+    I only use some functions from libutil. When thinking of OpenGL library for Windows
+    And Linux compatibility i was only able to come up with Mesa (it's really great software)
+    I only compile libGLU as compiling mesa3d on Windows is as hard as it sounds
+
+glvnd
+    MIT license. Only the headers under glvnd/include are used when compiling libGLU
+    https://github.com/KhronosGroup/glvnd
+
+Cabin font (assets/fonts/Cabin-Regular.ttf)
+    SIL Open Font License 1.1. Designed by Pablo Impallari.
+    https://github.com/impallari/Cabin
+
+Original SourceBox recreation
+    MIT License. Programmed in Python by Sierra (programmer1o1).
+    I heavily referenced their code for some things, so MASSIVE props to them :)
+    https://github.com/programmer1o1/SourceBox
