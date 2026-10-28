@@ -1,0 +1,171 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example v1.0.0)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  windows:
+    name: Windows x86_64 (MinGW)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+
+      - name: Configure
+        run: >
+          cmake -G Ninja -B build -S .
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=gcc
+          -DCMAKE_EXE_LINKER_FLAGS=-static
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Stage
+        run: |
+          set -euo pipefail
+          name="GLXSourcebox-${RELEASE_TAG}-windows-x64"
+          mkdir -p "dist/$name"
+          cp build/bin/sourcebox.exe "dist/$name/"
+          cp sdl2/bin/SDL2.dll sdl2/bin/SDL2_image.dll \
+             sdl2/bin/SDL2_mixer.dll sdl2/bin/SDL2_ttf.dll "dist/$name/"
+          cp -r assets "dist/$name/assets"
+          cp README.md LICENSE THIRD_PARTY_LIBS menu.png voidsite.png "dist/$name/"
+          if objdump -p "dist/$name/sourcebox.exe" | grep -Eiq 'DLL Name: (libgcc|libwinpthread|libstdc\+\+)'; then
+            echo "::error::sourcebox.exe still imports MinGW runtime DLLs"
+            objdump -p "dist/$name/sourcebox.exe" | grep 'DLL Name:'
+            exit 1
+          fi
+          printf '%s' "$name" > dist/win-name.txt
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $name = Get-Content -Raw dist/win-name.txt
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libgl-dev libx11-dev
+
+      - name: Configure
+        run: cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Stage
+        run: |
+          set -euo pipefail
+          name="GLXSourcebox-${RELEASE_TAG}-linux-x64"
+          mkdir -p "dist/$name"
+          strip build/bin/sourcebox
+          cp build/bin/sourcebox "dist/$name/"
+          cp -r assets "dist/$name/assets"
+          cp README.md LICENSE THIRD_PARTY_LIBS menu.png voidsite.png "dist/$name/"
+          glibc_ver=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
+          : "${glibc_ver:=unknown}"
+          cat > "dist/$name/RUNNING.txt" <<TXT
+          GLXSourceBox - Linux x86_64 release
+          ===================================
+
+          cd into this folder and run ./sourcebox or 
+          add sourcebox and the assets folder to your path
+          (for example, drop them in /usr/bin)
+
+          run these commands to install necessary deps in your distro of choice
+
+            Debian/Ubuntu based:
+              sudo apt install libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0 libgl1
+
+            Arch:
+              sudo pacman -S sdl2 sdl2_image sdl2_mixer sdl2_ttf mesa
+
+            Fedora:
+              sudo dnf install SDL2 SDL2_image SDL2_mixer SDL2_ttf mesa-libGL
+
+          An OpenGL 1.1-capable driver is required (any GPU driver / Mesa
+          that isnt 30 years old).
+          Built on ubuntu-latest runner (glibc ${glibc_ver}), so it needs glibc
+          ${glibc_ver} or newer. Older distributions may not be able to run it.
+          if you can get SDL2 and others to compile under musl with my code, i
+          would be glad to add a musl workflow :)
+
+          Logs: \$XDG_STATE_HOME/sourcebox/sourcebox.log
+                (~/.local/state/sourcebox/sourcebox.log if XDG_STATE_HOME doesnt exist
+                or isnt set)
+          TXT
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-x64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.zip *.tar.gz > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS
