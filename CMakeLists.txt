@@ -36,7 +36,8 @@ find_package(SDL2_ttf REQUIRED CONFIG)
 add_library(sb_glew STATIC glew/src/glew.c)
 target_include_directories(sb_glew SYSTEM PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/glew/include")
-target_compile_definitions(sb_glew PUBLIC GLEW_STATIC)
+# linux workflow fails without setting GLEW_NO_GLU here, but on my real machine it didnt fail? weird ubuntu-latest behaviour?
+target_compile_definitions(sb_glew PUBLIC GLEW_STATIC GLEW_NO_GLU)
 target_link_libraries(sb_glew PUBLIC OpenGL::GL)
 
 # this is for x11 linkage, libdl is sometimes merged into libc, so this does 
